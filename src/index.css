@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-bingo-teal: #218F87;
+  --color-bingo-navy: #172E4D;
+  --color-bingo-coral: #F28B78;
+  --color-bingo-yellow: #F5D98B;
+  --color-bingo-lavender: #DCD3F0;
+  --color-bingo-mint: #CFE5D7;
+  --color-bingo-lightblue: #D5E4F5;
+  --color-bingo-bg: #F4F6F8;
+}
+
+@layer base {
+  html, body {
+    font-family: var(--font-sans);
+    background-color: #F4F6F8;
+    color: #172E4D;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+  }
+}
+
+.pb-safe {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+@keyframes tabEnter {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-tab-enter {
+  animation: tabEnter 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

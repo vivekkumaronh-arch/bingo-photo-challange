@@ -1,0 +1,6 @@
+{
+  "name": "Human Bingo",
+  "description": "Meet People. Discover Connections. A colourful multiplayer social bingo game.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
