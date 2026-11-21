@@ -279,10 +279,10 @@ export function ChallengeSheet({
                 ref={galleryInputRef}
                 data-testid="gallery-file-input"
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 onChange={handleGalleryFileChange}
                 className="hidden"
-                aria-label="Choose photo from gallery"
+                aria-label="Choose JPEG, PNG, or WebP photo from gallery"
               />
 
               {cameraOpen ? (

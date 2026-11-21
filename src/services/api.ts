@@ -75,25 +75,69 @@ async function parseApiError(
 ): Promise<ApiError> {
   let message = fallback;
   let code: string | undefined;
+  let parsedJson = false;
+
   try {
-    const data = (await res.json()) as { error?: string; code?: string };
-    if (data?.error) message = data.error;
-    if (data?.code) code = data.code;
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('application/json')) {
+      const data = (await res.json()) as { error?: string; code?: string };
+      if (data?.error) {
+        message = data.error;
+        parsedJson = true;
+      }
+      if (data?.code) code = data.code;
+    }
   } catch {
     // ignore JSON parse failure
   }
+
+  if (!parsedJson) {
+    if (res.status === 404 || res.status === 405) {
+      code = code || 'BACKEND_API_UNAVAILABLE';
+      message = `Backend API endpoint unavailable (${res.status}). Ensure the full-stack Node server is running.`;
+    } else if (res.status === 502 || res.status === 503 || res.status === 504) {
+      code = code || 'SERVER_UNAVAILABLE';
+      message = `Game server is temporarily unavailable (${res.status}). Please try again.`;
+    } else if (res.status === 400) {
+      code = code || 'INVALID_REQUEST';
+      message = 'Invalid request. Please check your input and try again.';
+    }
+  }
+
   if (import.meta.env.DEV) {
     console.error(`[API] ${operation} failed (${res.status})`, { code, message });
   }
   return new ApiError(message, res.status, code);
 }
 
+async function performApiFetch(
+  operation: string,
+  input: string,
+  init: RequestInit,
+): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : 'Network failure';
+    if (import.meta.env.DEV) {
+      console.error(`[API] ${operation} connection failed`, { message: detail });
+    }
+    throw new ApiError(
+      'Unable to reach the game server. Check your internet connection and server status.',
+      0,
+      'CONNECTION_FAILED',
+    );
+  }
+}
+
 export async function fetchSession(): Promise<GameStatePayload | null> {
-  const res = await fetch('/api/session', {
+  const res = await performApiFetch('GET /api/session', '/api/session', {
     credentials: 'include',
     headers: buildAuthHeaders(),
   });
   if (!res.ok) return null;
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) return null;
   const data = (await res.json()) as { session: GameStatePayload | null };
   const session = data.session ?? null;
   if (session) {
@@ -103,7 +147,7 @@ export async function fetchSession(): Promise<GameStatePayload | null> {
 }
 
 export async function createNewGame(): Promise<GameRecord> {
-  const res = await fetch('/api/games', {
+  const res = await performApiFetch('POST /api/games', '/api/games', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
@@ -112,19 +156,38 @@ export async function createNewGame(): Promise<GameRecord> {
   if (!res.ok) {
     throw await parseApiError('POST /api/games', res, 'Could not create a new game.');
   }
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new ApiError(
+      'Backend API returned an invalid response. Ensure the full-stack server is running.',
+      res.status,
+      'BACKEND_API_UNAVAILABLE',
+    );
+  }
   const data = (await res.json()) as { game: GameRecord };
+  if (!data?.game?.joiningCode) {
+    throw new ApiError('Game creation failed: invalid server response.', 500, 'INVALID_RESPONSE');
+  }
   return data.game;
 }
 
 export async function joinExistingGame(joiningCode: string, name: string): Promise<GameStatePayload> {
-  const res = await fetch('/api/games/join', {
+  const res = await performApiFetch('POST /api/games/join', '/api/games/join', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ joiningCode, name }),
   });
   if (!res.ok) {
-    throw await parseApiError('POST /api/games/join', res, 'Could not join game.');
+    throw await parseApiError('POST /api/games/join', res, 'Participant creation failed.');
+  }
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    throw new ApiError(
+      'Backend API returned an invalid response. Ensure the full-stack server is running.',
+      res.status,
+      'BACKEND_API_UNAVAILABLE',
+    );
   }
   const payload = (await res.json()) as GameStatePayload;
   setSessionTokens(payload);
@@ -132,10 +195,14 @@ export async function joinExistingGame(joiningCode: string, name: string): Promi
 }
 
 export async function fetchGameState(joiningCode: string): Promise<GameStatePayload> {
-  const res = await fetch(`/api/games/${encodeURIComponent(joiningCode)}/state`, {
-    credentials: 'include',
-    headers: buildAuthHeaders(),
-  });
+  const res = await performApiFetch(
+    `GET /api/games/${joiningCode}/state`,
+    `/api/games/${encodeURIComponent(joiningCode)}/state`,
+    {
+      credentials: 'include',
+      headers: buildAuthHeaders(),
+    },
+  );
   if (!res.ok) {
     throw await parseApiError(
       `GET /api/games/${joiningCode}/state`,
@@ -153,7 +220,8 @@ export async function uploadChallengePhoto(
   challengeId: number,
   blob: Blob,
 ): Promise<{ submission: PhotoSubmissionRecord; replaced: boolean; state: GameStatePayload }> {
-  const res = await fetch(
+  const res = await performApiFetch(
+    `POST /api/games/${joiningCode}/submissions`,
     `/api/games/${encodeURIComponent(joiningCode)}/submissions?challengeId=${encodeURIComponent(
       String(challengeId),
     )}`,

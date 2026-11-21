@@ -159,14 +159,22 @@ export function createGame(nowMs: number = Date.now()): GameRecord {
     const code = formatJoiningCode(crypto.randomInt(0, 10000));
     const existing = checkStmt.get(code) as { id: string; status: string; expires_at: number } | undefined;
     if (!existing) {
-      insertStmt.run(id, code, nowMs, expiresAt);
-      return {
-        id,
-        joiningCode: code,
-        status: 'active',
-        createdAt: nowMs,
-        expiresAt,
-      };
+      try {
+        insertStmt.run(id, code, nowMs, expiresAt);
+        return {
+          id,
+          joiningCode: code,
+          status: 'active',
+          createdAt: nowMs,
+          expiresAt,
+        };
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '';
+        if (msg.includes('UNIQUE') || msg.includes('constraint')) {
+          continue;
+        }
+        throw err;
+      }
     }
   }
 
